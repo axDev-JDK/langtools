@@ -628,7 +628,7 @@
                classpath="${build.bootstrap.dir}/classes:${ant.home}/lib/ant.jar"/>
         <taskdef name="genstubs"
                  classname="GenStubs$$Ant"
-                 classpath="${build.toolclasses.dir}/"/>
+                 classpath="${build.toolclasses.dir}:${build.bootstrap.dir}/classes:${ant.home}/lib/ant.jar"/>
     </target>
 
     <target name="-def-javadoc-tool" depends="-check-target.java.home">
