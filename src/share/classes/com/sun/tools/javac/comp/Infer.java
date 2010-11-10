@@ -25,6 +25,8 @@
 
 package com.sun.tools.javac.comp;
 
+import com.sun.tools.javac.tree.JCTree;
+import com.sun.tools.javac.tree.JCTree.JCTypeCast;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.code.*;
@@ -78,25 +80,12 @@ public class Infer {
 
     }
 
-    public static class InferenceException extends RuntimeException {
+    public static class InferenceException extends Resolve.InapplicableMethodException {
         private static final long serialVersionUID = 0;
 
-        JCDiagnostic diagnostic;
-        JCDiagnostic.Factory diags;
-
         InferenceException(JCDiagnostic.Factory diags) {
-            this.diagnostic = null;
-            this.diags = diags;
+            super(diags);
         }
-
-        InferenceException setMessage(String key, Object... args) {
-            this.diagnostic = diags.fragment(key, args);
-            return this;
-        }
-
-        public JCDiagnostic getDiagnostic() {
-             return diagnostic;
-         }
     }
 
     public static class NoInstanceException extends InferenceException {
@@ -318,7 +307,7 @@ public class Infer {
         Type qtype1 = types.subst(that.qtype, that.tvars, undetvars);
         if (!types.isSubtype(qtype1, to)) {
             throw unambiguousNoInstanceException
-                .setMessage("no.conforming.instance.exists",
+                .setMessage("infer.no.conforming.instance.exists",
                             that.tvars, that.qtype, to);
         }
         for (List<Type> l = undetvars; l.nonEmpty(); l = l.tail)
@@ -376,6 +365,11 @@ public class Infer {
         // instantiate all polymorphic argument types and
         // set up lower bounds constraints for undetvars
         Type varargsFormal = useVarargs ? formals.last() : null;
+        if (varargsFormal == null &&
+                actuals.size() != formals.size()) {
+            throw unambiguousNoInstanceException
+                .setMessage("infer.arg.length.mismatch");
+        }
         while (actuals.nonEmpty() && formals.head != varargsFormal) {
             Type formal = formals.head;
             Type actual = actuals.head.baseType();
@@ -388,19 +382,16 @@ public class Infer {
                 : types.isSubtypeUnchecked(actual, undetFormal, warn);
             if (!works) {
                 throw unambiguousNoInstanceException
-                    .setMessage("no.conforming.assignment.exists",
+                    .setMessage("infer.no.conforming.assignment.exists",
                                 tvars, actualNoCapture, formal);
             }
             formals = formals.tail;
             actuals = actuals.tail;
             actualsNoCapture = actualsNoCapture.tail;
         }
-        if (formals.head != varargsFormal || // not enough args
-            !useVarargs && actuals.nonEmpty()) { // too many args
-            // argument lists differ in length
-            throw unambiguousNoInstanceException
-                .setMessage("arg.length.mismatch");
-        }
+
+        if (formals.head != varargsFormal) // not enough args
+            throw unambiguousNoInstanceException.setMessage("infer.arg.length.mismatch");
 
         // for varargs arguments as well
         if (useVarargs) {
@@ -414,7 +405,7 @@ public class Infer {
                 boolean works = types.isConvertible(actual, elemUndet, warn);
                 if (!works) {
                     throw unambiguousNoInstanceException
-                        .setMessage("no.conforming.assignment.exists",
+                        .setMessage("infer.no.conforming.assignment.exists",
                                     tvars, actualNoCapture, elemType);
                 }
                 actuals = actuals.tail;
@@ -543,4 +534,68 @@ public class Infer {
                                 args.head, bounds);
         }
     }
+
+    /**
+     * Compute a synthetic method type corresponding to the requested polymorphic
+     * method signature. If no explicit return type is supplied, a provisional
+     * return type is computed (just Object in case of non-transitional 292)
+     */
+    Type instantiatePolymorphicSignatureInstance(Env<AttrContext> env, Type site,
+                                            Name name,
+                                            MethodSymbol spMethod,  // sig. poly. method or null if none
+                                            List<Type> argtypes,
+                                            List<Type> typeargtypes) {
+        final Type restype;
+        if (rs.allowTransitionalJSR292 && typeargtypes.nonEmpty()) {
+            restype = typeargtypes.head;
+        } else {
+            //The return type for a polymorphic signature call is computed from
+            //the enclosing tree E, as follows: if E is a cast, then use the
+            //target type of the cast expression as a return type; if E is an
+            //expression statement, the return type is 'void' - otherwise the
+            //return type is simply 'Object'. A correctness check ensures that
+            //env.next refers to the lexically enclosing environment in which
+            //the polymorphic signature call environment is nested.
+
+            switch (env.next.tree.getTag()) {
+                case JCTree.TYPECAST:
+                    JCTypeCast castTree = (JCTypeCast)env.next.tree;
+                    restype = (castTree.expr == env.tree) ?
+                        castTree.clazz.type :
+                        syms.objectType;
+                    break;
+                case JCTree.EXEC:
+                    JCTree.JCExpressionStatement execTree =
+                            (JCTree.JCExpressionStatement)env.next.tree;
+                    restype = (execTree.expr == env.tree) ?
+                        syms.voidType :
+                        syms.objectType;
+                    break;
+                default:
+                    restype = syms.objectType;
+            }
+        }
+
+        List<Type> paramtypes = Type.map(argtypes, implicitArgType);
+        List<Type> exType = spMethod != null ?
+            spMethod.getThrownTypes() :
+            List.of(syms.throwableType); // make it throw all exceptions
+
+        MethodType mtype = new MethodType(paramtypes,
+                                          restype,
+                                          exType,
+                                          syms.methodClass);
+        return mtype;
+    }
+    //where
+        Mapping implicitArgType = new Mapping ("implicitArgType") {
+                public Type apply(Type t) {
+                    t = types.erasure(t);
+                    if (t.tag == BOT)
+                        // nulls type as the marker type Null (which has no instances)
+                        // infer as java.lang.Void for now
+                        t = types.boxedClass(syms.voidType).type;
+                    return t;
+                }
+        };
 }
