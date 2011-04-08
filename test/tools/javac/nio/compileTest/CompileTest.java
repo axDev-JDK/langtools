@@ -23,7 +23,7 @@
 
 /**
  * @test
- * @bug 6906175 6915476 6915497
+ * @bug 6906175 6915476 6915497 7006564
  * @summary Path-based JavaFileManager
  * @compile -g HelloPathWorld.java
  * @run main CompileTest
@@ -84,8 +84,7 @@ public class CompileTest {
         System.err.println("Test " + count + " " + Arrays.asList(opts) + " " + className);
         Path testSrcDir = Paths.get(System.getProperty("test.src"));
         Path testClassesDir = Paths.get(System.getProperty("test.classes"));
-        Path classes = Paths.get("classes." + count);
-        classes.createDirectory();
+        Path classes = Files.createDirectory(Paths.get("classes." + count));
 
         Context ctx = new Context();
         PathFileManager fm = new JavacPathFileManager(ctx, true, null);

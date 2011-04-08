@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -81,8 +81,7 @@ public abstract class Symbol implements Element {
      *  method to make sure that the class symbol is loaded.
      */
     public List<Attribute.Compound> getAnnotationMirrors() {
-        assert attributes_field != null;
-        return attributes_field;
+        return Assert.checkNonNull(attributes_field);
     }
 
     /** Fetch a particular annotation from a symbol. */
@@ -99,17 +98,6 @@ public abstract class Symbol implements Element {
     /** The type of this symbol.
      */
     public Type type;
-
-    /** The type annotations targeted to a tree directly owned by this symbol
-     */
-    // type annotations are stored here for two purposes:
-    //  - convenient location to store annotations for generation after erasure
-    //  - a private interface for accessing type annotations parsed from
-    //    classfiles
-    //  the field is populated for the following declaration only
-    //  class, field, variable and type parameters
-    //
-    public List<Attribute.TypeCompound> typeAnnotations;
 
     /** The owner of this symbol.
      */
@@ -133,7 +121,6 @@ public abstract class Symbol implements Element {
         this.completer = null;
         this.erasure_field = null;
         this.attributes_field = List.nil();
-        this.typeAnnotations = List.nil();
         this.name = name;
     }
 
@@ -608,7 +595,7 @@ public abstract class Symbol implements Element {
         }
 
         public <R, P> R accept(ElementVisitor<R, P> v, P p) {
-            assert type.tag == TYPEVAR; // else override will be invoked
+            Assert.check(type.tag == TYPEVAR); // else override will be invoked
             return v.visitTypeParameter(this, p);
         }
 
@@ -682,8 +669,7 @@ public abstract class Symbol implements Element {
                 if (attributes_field.isEmpty())
                     attributes_field = package_info.attributes_field;
             }
-            assert attributes_field != null;
-            return attributes_field;
+            return Assert.checkNonNull(attributes_field);
         }
 
         /** A package "exists" if a type or package that exists has
@@ -743,6 +729,10 @@ public abstract class Symbol implements Element {
          */
         public Pool pool;
 
+        /** members closure cache (set by Types.membersClosure)
+         */
+        Scope membersClosure;
+
         public ClassSymbol(long flags, Name name, Type type, Symbol owner) {
             super(flags, name, type, owner);
             this.members_field = null;
@@ -780,8 +770,7 @@ public abstract class Symbol implements Element {
 
         public List<Attribute.Compound> getAnnotationMirrors() {
             if (completer != null) complete();
-            assert attributes_field != null;
-            return attributes_field;
+            return Assert.checkNonNull(attributes_field);
         }
 
         public Type erasure(Types types) {
@@ -976,22 +965,12 @@ public abstract class Symbol implements Element {
         }
 
         public void setLazyConstValue(final Env<AttrContext> env,
-                                      final Log log,
                                       final Attr attr,
                                       final JCTree.JCExpression initializer)
         {
             setData(new Callable<Object>() {
                 public Object call() {
-                    JavaFileObject source = log.useSource(env.toplevel.sourcefile);
-                    try {
-                        Type itype = attr.attribExpr(initializer, env, type);
-                        if (itype.constValue() != null)
-                            return attr.coerce(itype, type).constValue();
-                        else
-                            return null;
-                    } finally {
-                        log.useSource(source);
-                    }
+                    return attr.attribLazyConstantValue(env, initializer, type);
                 }
             });
         }
@@ -1025,6 +1004,7 @@ public abstract class Symbol implements Element {
                 try {
                     data = eval.call();
                 } catch (Exception ex) {
+                    ex.printStackTrace();
                     throw new AssertionError(ex);
                 }
             }
@@ -1032,7 +1012,7 @@ public abstract class Symbol implements Element {
         }
 
         public void setData(Object data) {
-            assert !(data instanceof Env<?>) : this;
+            Assert.check(!(data instanceof Env<?>), this);
             this.data = data;
         }
 
@@ -1064,7 +1044,7 @@ public abstract class Symbol implements Element {
          */
         public MethodSymbol(long flags, Name name, Type type, Symbol owner) {
             super(MTH, flags, name, type, owner);
-            assert owner.type.tag != TYPEVAR : owner + "." + name;
+            if (owner.type.tag == TYPEVAR) Assert.error(owner + "." + name);
         }
 
         /** Clone this symbol with new owner.
@@ -1246,7 +1226,7 @@ public abstract class Symbol implements Element {
             };
 
         public MethodSymbol implementation(TypeSymbol origin, Types types, boolean checkResult, Filter<Symbol> implFilter) {
-            MethodSymbol res = types.implementation(this, origin, types, checkResult, implFilter);
+            MethodSymbol res = types.implementation(this, origin, checkResult, implFilter);
             if (res != null)
                 return res;
             // if origin is derived from a raw type, we might have missed
