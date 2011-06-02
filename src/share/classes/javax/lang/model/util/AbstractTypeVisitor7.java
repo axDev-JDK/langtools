@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, 2011 Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2010, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -67,11 +67,11 @@ public abstract class AbstractTypeVisitor7<R, P> extends AbstractTypeVisitor6<R,
     }
 
     /**
-     * Visits a {@code DisjunctiveType} in a manner defined by a subclass.
+     * Visits a {@code UnionType} in a manner defined by a subclass.
      *
      * @param t  {@inheritDoc}
      * @param p  {@inheritDoc}
      * @return the result of the visit as defined by a subclass
      */
-    public abstract R visitDisjunctive(DisjunctiveType t, P p);
+    public abstract R visitUnion(UnionType t, P p);
 }

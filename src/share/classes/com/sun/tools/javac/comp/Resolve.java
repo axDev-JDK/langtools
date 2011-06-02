@@ -338,11 +338,15 @@ public class Resolve {
 
         // tvars is the list of formal type variables for which type arguments
         // need to inferred.
-        List<Type> tvars = env.info.tvars;
+        List<Type> tvars = null;
+        if (env.info.tvars != null) {
+            tvars = types.newInstances(env.info.tvars);
+            mt = types.subst(mt, env.info.tvars, tvars);
+        }
         if (typeargtypes == null) typeargtypes = List.nil();
         if (mt.tag != FORALL && typeargtypes.nonEmpty()) {
             // This is not a polymorphic method, but typeargs are supplied
-            // which is fine, see JLS3 15.12.2.1
+            // which is fine, see JLS 15.12.2.1
         } else if (mt.tag == FORALL && typeargtypes.nonEmpty()) {
             ForAll pmt = (ForAll) mt;
             if (typeargtypes.length() != pmt.tvars.length())
@@ -454,9 +458,7 @@ public class Resolve {
             throw inapplicableMethodException.setMessage("arg.length.mismatch"); // not enough args
 
         if (useVarargs) {
-            //note: if applicability check is triggered by most specific test,
-            //the last argument of a varargs is _not_ an array type (see JLS 15.12.2.5)
-            Type elt = types.elemtypeOrType(varargsFormal);
+            Type elt = types.elemtype(varargsFormal);
             while (argtypes.nonEmpty()) {
                 if (!types.isConvertible(argtypes.head, elt, warn))
                     throw inapplicableMethodException.setMessage("varargs.argument.mismatch",
@@ -766,12 +768,9 @@ public class Resolve {
                     return ambiguityError(m1, m2);
                 // both abstract, neither overridden; merge throws clause and result type
                 Symbol mostSpecific;
-                Type result2 = mt2.getReturnType();
-                if (mt2.tag == FORALL)
-                    result2 = types.subst(result2, ((ForAll)mt2).tvars, ((ForAll)mt1).tvars);
-                if (types.isSubtype(mt1.getReturnType(), result2))
+                if (types.returnTypeSubstitutable(mt1, mt2))
                     mostSpecific = m1;
-                else if (types.isSubtype(result2, mt1.getReturnType()))
+                else if (types.returnTypeSubstitutable(mt2, mt1))
                     mostSpecific = m2;
                 else {
                     // Theoretically, this can't happen, but it is possible
@@ -818,10 +817,10 @@ public class Resolve {
     private boolean signatureMoreSpecific(Env<AttrContext> env, Type site, Symbol m1, Symbol m2, boolean allowBoxing, boolean useVarargs) {
         noteWarner.clear();
         Type mtype1 = types.memberType(site, adjustVarargs(m1, m2, useVarargs));
-        return (instantiate(env, site, adjustVarargs(m2, m1, useVarargs), types.lowerBoundArgtypes(mtype1), null,
-                             allowBoxing, false, noteWarner) != null ||
-                 useVarargs && instantiate(env, site, adjustVarargs(m2, m1, useVarargs), types.lowerBoundArgtypes(mtype1), null,
-                                           allowBoxing, true, noteWarner) != null) &&
+        Type mtype2 = instantiate(env, site, adjustVarargs(m2, m1, useVarargs),
+                types.lowerBoundArgtypes(mtype1), null,
+                allowBoxing, false, noteWarner);
+        return mtype2 != null &&
                 !noteWarner.hasLint(Lint.LintCategory.UNCHECKED);
     }
     //where
@@ -854,7 +853,7 @@ public class Resolve {
             //append varargs element type as last synthetic formal
             args.append(types.elemtype(varargsTypeTo));
             Type mtype = types.createMethodTypeWithParameters(to.type, args.toList());
-            return new MethodSymbol(to.flags_field, to.name, mtype, to.owner);
+            return new MethodSymbol(to.flags_field & ~VARARGS, to.name, mtype, to.owner);
         } else {
             return to;
         }
@@ -1768,7 +1767,7 @@ public class Resolve {
 
     /**
      * Resolve an appropriate implicit this instance for t's container.
-     * JLS2 8.8.5.1 and 15.9.2
+     * JLS 8.8.5.1 and 15.9.2
      */
     Type resolveImplicitThis(DiagnosticPosition pos, Env<AttrContext> env, Type t) {
         return resolveImplicitThis(pos, env, t, false);

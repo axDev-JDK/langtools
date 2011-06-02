@@ -676,10 +676,16 @@ public class Check {
                     "cant.apply.diamond.1",
                     t, diags.fragment("diamond.and.anon.class", t));
             return types.createErrorType(t);
-        } else if (!t.tsym.type.isParameterized()) {
+        } else if (t.tsym.type.getTypeArguments().isEmpty()) {
             log.error(tree.clazz.pos(),
                 "cant.apply.diamond.1",
                 t, diags.fragment("diamond.non.generic", t));
+            return types.createErrorType(t);
+        } else if (tree.typeargs != null &&
+                tree.typeargs.nonEmpty()) {
+            log.error(tree.clazz.pos(),
+                "cant.apply.diamond.1",
+                t, diags.fragment("diamond.and.explicit.params", t));
             return types.createErrorType(t);
         } else {
             return t;
@@ -2271,7 +2277,7 @@ public class Check {
      * that of any public or protected method declared in class Object
      * or in the interface annotation.Annotation."
      *
-     * @jls3 9.6 Annotation Types
+     * @jls 9.6 Annotation Types
      */
     void validateAnnotationMethod(DiagnosticPosition pos, MethodSymbol m) {
         for (Type sup = syms.annotationType; sup.tag == CLASS; sup = types.supertype(sup)) {
