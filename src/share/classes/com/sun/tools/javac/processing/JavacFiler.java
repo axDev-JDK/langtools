@@ -455,9 +455,8 @@ public class JavacFiler implements Filer, Closeable {
         // TODO: Only support reading resources in selected output
         // locations?  Only allow reading of non-source, non-class
         // files from the supported input locations?
-        FileObject fileObject = fileManager.getFileForInput(location,
-                    pkg.toString(),
-                    relativeName.toString());
+        FileObject fileObject = fileManager.getFileForOutput(location,
+                pkg.toString(), relativeName.toString(), null);
         if (fileObject == null) {
             String name = (pkg.length() == 0)
                     ? relativeName.toString() : (pkg + "/" + relativeName);
