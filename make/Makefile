@@ -111,6 +111,10 @@ ifeq ($(DEBUG_CLASSFILES), true)
   ANT_OPTIONS += -Ddebug.classfiles=true
 endif
 
+ifeq ($(JAVAC_WARNINGS_FATAL), false)
+  ANT_OPTIONS += -Djavac.warnings.fatal=
+endif
+
 # Note: jdk/make/common/Defs.gmk uses LANGUAGE_VERSION (-source NN)
 # and the somewhat misnamed CLASS_VERSION (-target NN)
 ifdef TARGET_CLASS_VERSION
